@@ -12,11 +12,16 @@ export interface ElementProps {
 	[name: string]: unknown;
 }
 
+export type Component = (props: any) => Child;
+
 export interface AtlasElement {
-	type: string;
+	type: string | Component;
 	props: ElementProps;
 }
 
-export function createElement(type: string, props: ElementProps = {}): AtlasElement {
+export function createElement(
+	type: AtlasElement["type"],
+	props: ElementProps = {},
+): AtlasElement {
 	return { type, props };
 }

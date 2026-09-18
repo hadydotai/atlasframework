@@ -26,6 +26,15 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 		return;
 	}
 
+	if (
+		typeof child === "object" &&
+		typeof child.type === "function"
+	) {
+		const output = child.type(child.props);
+		walk(output, visit, depth);
+		return;
+	}
+
 	visit(child, depth);
 
 	// NOTE(@hadydotai): Here we're definitely bumping up the depth

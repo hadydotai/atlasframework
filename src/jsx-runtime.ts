@@ -1,7 +1,10 @@
 import { createElement } from "./element.js";
-import type { AtlasElement, Child, ElementProps } from "./element.js";
+import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
 
-export function jsx(type: string, props: ElementProps | null): AtlasElement {
+export function jsx(
+	type: AtlasElement["type"], 
+	props: ElementProps | null,
+): AtlasElement {
 	return createElement(type, props ?? {});
 }
 
@@ -14,7 +17,11 @@ export const jsxs = jsx;
 // iykyk...
 // Anyhow, this is how we teach TS what our native elements look like.
 export namespace JSX {
+	// What a JSX expression produces
 	export type Element = AtlasElement;
+	// What can appear as a tag
+	// https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-1.html#decoupled-type-checking-between-jsx-elements-and-jsx-tag-types
+	export type ElementType = keyof IntrinsicElements | Component;
 
 	export interface ElementChildrenAttribute {
 		children: unknown;
