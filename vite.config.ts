@@ -6,9 +6,13 @@ export default defineConfig({
 		minify: false,
 		sourcemap: true,
 		lib: {
-			entry: "src/index.ts",
+			entry: {
+				index: "src/index.ts",
+				"jsx-runtime": "src/jsx-runtime.ts",
+				"jsx-dev-runtime": "src/jsx-dev-runtime.ts",
+			},
 			formats: ["es"],
-			fileName: () => "index.js",
+			fileName: (_format, entryName) => `${entryName}.js`,
 		},
 	},
 });
