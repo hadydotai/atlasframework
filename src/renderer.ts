@@ -10,7 +10,6 @@ export function renderMessages(tree: Child): Message[] {
 	const messages: Message[] = [];
 
 	walk(tree, (node) => {
-		console.log(">>>>", node);
 		if (typeof node !== "object") {
 			throw new Error("Free form text must sit inside a <message> boundary.");
 		}
