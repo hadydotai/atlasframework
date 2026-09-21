@@ -3,7 +3,7 @@ import type { AtlasElement, Child } from "./element.js";
 type Visitor = (
 	node: AtlasElement | string | number,
 	depth: number,
-) => void;
+) => void | false;
 
 // NOTE(@hadydotai): Not sure how React does, will need to revisit
 // but I reckon a simple depth-first pre-order is sufficient for most
@@ -35,7 +35,9 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 		return;
 	}
 
-	visit(child, depth);
+	if (visit(child, depth) === false) {
+		return;
+	}
 
 	// NOTE(@hadydotai): Here we're definitely bumping up the depth
 	// because well, it's likely an element with children nodes.

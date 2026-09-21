@@ -1,4 +1,4 @@
-import { walk } from "atlasframework";
+import { renderMessages } from "atlasframework";
 
 interface ReviewerProps {
 	code: string;
@@ -23,16 +23,8 @@ const tree = (
 console.log("Tree created");
 console.dir(tree, { depth: null });
 
-console.log("Walking");
-
-walk(tree, (node, depth) => {
-	const indent = "  ".repeat(depth);
-	if (typeof node === "object") {
-		console.log(`${indent}<${node.type}>`);
-	} else {
-		console.log(`${indent}${node}`);
-	}
-});
+const messages = renderMessages(tree);
+console.dir(messages, { depth: null });
 
 // npm run build
 // npx tsc -p examples/tsconfig.json

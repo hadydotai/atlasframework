@@ -1,5 +1,6 @@
 import { createElement } from "./element.js";
 import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
+import type { Message } from "./renderer.js";
 
 export function jsx(
 	type: AtlasElement["type"], 
@@ -34,7 +35,7 @@ export namespace JSX {
 		};
 
 		message: {
-			role: "system" | "user" | "assistant";
+			role: Message["role"];
 			children?: Child;
 		};
 	}
