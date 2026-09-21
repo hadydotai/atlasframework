@@ -14,6 +14,12 @@ export interface ElementProps {
 
 export type Component = (props: any) => Child;
 
+export function Fragment(
+	props: { children?: Child },
+): Child {
+	return props.children;
+}
+
 export interface AtlasElement {
 	type: string | Component;
 	props: ElementProps;

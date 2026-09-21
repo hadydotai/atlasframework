@@ -1,6 +1,8 @@
-import { createElement } from "./element.js";
+import {createElement } from "./element.js";
 import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
 import type { Message } from "./renderer.js";
+
+export { Fragment } from "./element.js";
 
 export function jsx(
 	type: AtlasElement["type"], 

@@ -8,10 +8,9 @@ function Code({ code } : { code: string }) {
 	return ["Source code:\n", code];
 }
 
-function Reviewer({ code }: ReviewerProps) {
-	console.log("Reviewer executed");
+function ReviewMessages({ code }: ReviewerProps) {
 	return (
-		<agent name="reviewer">
+		<>
 			<message role="system">
 				Review the code for reptitive patterns.
 			</message>
@@ -28,6 +27,15 @@ function Reviewer({ code }: ReviewerProps) {
 				*/}
 				<Code code={code} />
 			</message>
+		</>
+	)
+}
+
+function Reviewer({ code }: ReviewerProps) {
+	console.log("Reviewer executed");
+	return (
+		<agent name="reviewer">
+			<ReviewMessages code={code} />
 		</agent>
 	);
 }
