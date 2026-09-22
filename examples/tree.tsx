@@ -1,10 +1,29 @@
 import { createRuntime } from "atlasframework";
 import type { Provider } from "atlasframework";
 
+function delay(millis: number, signal: AbortSignal): Promise<void> {
+	signal.throwIfAborted();
+
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener("abort", onAbort);
+			resolve();
+		}, millis);
+		function onAbort() {
+			clearTimeout(timer);
+			reject(signal.reason);
+		}
+
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
 const provider: Provider = {
-	async complete(request) {
+	async complete(request, { signal }) {
 		console.log("Fake provider received:");
 		console.dir(request, { depth: null });
+
+		await delay(1_000, signal);
 
 		return {
 			items: [
@@ -79,13 +98,24 @@ console.dir(tree, { depth: null });
 const runtime = createRuntime(provider);
 console.log("Starting a run");
 
-const response = await runtime.run(tree);
-console.log("Run completed:");
-console.dir(response, { depth: null });
-for (const item of response.items) {
-	if (item.type === "message") {
-		console.log(item.content);
-	}
+const controller = new AbortController();
+const cancelTimer = setTimeout(() => {
+	controller.abort(new Error("Stopped by fake caller"));
+}, 100);
+
+try {
+	const response = await runtime.run(tree, {
+		signal: controller.signal,
+	});
+
+	console.log("Run completed: ");
+	console.dir(response, { depth: null });
+} catch (err) {
+	console.error(
+		err instanceof Error ? err.message: err,
+	);
+} finally {
+	clearTimeout(cancelTimer);
 }
 
 // npm run build

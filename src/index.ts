@@ -19,8 +19,10 @@ export type {
 export { walk } from "./walk.js";
 
 export { createRuntime } from "./runtime.js";
+export type { RunOptions } from "./runtime.js";
 
 export type {
+	CallContext,
 	ModelRequest,
 	ModelResponse,
 	Provider,

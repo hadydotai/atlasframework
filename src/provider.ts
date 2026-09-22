@@ -17,7 +17,11 @@ export interface ModelResponse {
 	raw?: JsonValue;
 }
 
+export interface CallContext {
+	signal: AbortSignal;
+}
+
 export interface Provider {
-	complete(request: ModelRequest): Promise<ModelResponse>;
+	complete(request: ModelRequest, context: CallContext): Promise<ModelResponse>;
 }
 
