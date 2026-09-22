@@ -7,8 +7,24 @@ const provider: Provider = {
 		console.dir(request, { depth: null });
 
 		return {
-			role: "assistant",
-			content: `Fake review: received ${request.messages.length} messages.`,
+			items: [
+				{
+					type: "provider",
+					replay: {
+						integration: "fake",
+						model: "fake-reviewer-model",
+						payload: {
+							continuation: "example-opaque-value",
+						},
+					},
+				},
+				{
+					type: "message",
+					role: "assistant",
+					content: `Fake review: received ${request.items.length} items.`,
+				}
+			],
+			stopReason: "end-turn",
 		};
 	},
 };
@@ -66,6 +82,11 @@ console.log("Starting a run");
 const response = await runtime.run(tree);
 console.log("Run completed:");
 console.dir(response, { depth: null });
+for (const item of response.items) {
+	if (item.type === "message") {
+		console.log(item.content);
+	}
+}
 
 // npm run build
 // npx tsc -p examples/tsconfig.json

@@ -1,10 +1,6 @@
 import type { Child } from "./element.js";
+import type { Message } from "./protocol.js";
 import { walk } from "./walk.js";
-
-export interface Message {
-	role: "system" | "user" | "assistant";
-	content: string;
-}
 
 export function renderMessages(tree: Child): Message[] {
 	const messages: Message[] = [];
@@ -52,6 +48,7 @@ export function renderMessages(tree: Child): Message[] {
 		});
 
 		messages.push({
+			type: "message",
 			role,
 			content: parts.join(""),
 		})

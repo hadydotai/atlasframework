@@ -1,6 +1,6 @@
 import {createElement } from "./element.js";
 import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
-import type { Message } from "./renderer.js";
+import type { Message } from "./protocol.js";
 
 export { Fragment } from "./element.js";
 

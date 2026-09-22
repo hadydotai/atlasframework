@@ -1,12 +1,20 @@
-import type { Message } from "./renderer.js";
+import type { 
+	ConversationItem,
+	JsonValue,
+	ModelOutput,
+	StopReason,
+	Usage,
+} from "./protocol.js";
 
 export interface ModelRequest {
-	messages: readonly Message[];
+	items: readonly ConversationItem[];
 }
 
 export interface ModelResponse {
-	role: "assistant";
-	content: string;
+	items: readonly ModelOutput[];
+	stopReason: StopReason;
+	usage?: Usage;
+	raw?: JsonValue;
 }
 
 export interface Provider {

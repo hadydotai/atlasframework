@@ -2,7 +2,19 @@ export { createElement } from "./element.js";
 export type { AtlasElement, Child, ElementProps } from "./element.js";
 
 export { renderMessages } from "./renderer.js";
-export type { Message } from "./renderer.js";
+export type { 
+	JsonValue,
+	ReplayData,
+	Message,
+	AssistantMessage,
+	ToolCall,
+	ToolResult,
+	ProviderItem,
+	ConversationItem,
+	ModelOutput,
+	StopReason,
+	Usage,
+} from "./protocol.js";
 
 export { walk } from "./walk.js";
 

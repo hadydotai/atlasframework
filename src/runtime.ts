@@ -6,7 +6,7 @@ export function createRuntime(provider: Provider) {
 	return {
 		async run(tree: Child): Promise<ModelResponse> {
 			const messages = renderMessages(tree);
-			return provider.complete({ messages });
+			return provider.complete({ items: messages });
 		},
 	};
 }
