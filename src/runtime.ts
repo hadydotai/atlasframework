@@ -15,7 +15,7 @@ export function createRuntime(provider: Provider) {
 			const messages = renderMessages(tree);
 			signal.throwIfAborted();
 
-			const response = provider.complete(
+			const response = await provider.complete(
 				{ items: messages },
 				{ signal },
 			);
