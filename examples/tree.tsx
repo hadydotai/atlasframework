@@ -1,4 +1,17 @@
-import { renderMessages } from "atlasframework";
+import { createRuntime } from "atlasframework";
+import type { Provider } from "atlasframework";
+
+const provider: Provider = {
+	async complete(request) {
+		console.log("Fake provider received:");
+		console.dir(request, { depth: null });
+
+		return {
+			role: "assistant",
+			content: `Fake review: received ${request.messages.length} messages.`,
+		};
+	},
+};
 
 interface ReviewerProps {
 	code: string;
@@ -47,8 +60,12 @@ const tree = (
 console.log("Tree created");
 console.dir(tree, { depth: null });
 
-const messages = renderMessages(tree);
-console.dir(messages, { depth: null });
+const runtime = createRuntime(provider);
+console.log("Starting a run");
+
+const response = await runtime.run(tree);
+console.log("Run completed:");
+console.dir(response, { depth: null });
 
 // npm run build
 // npx tsc -p examples/tsconfig.json
