@@ -18,6 +18,10 @@
 		"./jsx-dev-runtime": {
 			"types": "./dist/jsx-dev-runtime.d.ts",
 			"import": "./dist/jsx-dev-runtime.js"
+		},
+		"./providers/anthropic": {
+			"types": "./dist/providers/anthropic.d.ts",
+			"import": "./dist/providers/anthropic.js"
 		}
 	},
 	"scripts": {
