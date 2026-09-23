@@ -18,6 +18,31 @@ const request: ModelRequest = {
 			role: "user",
 			content: "Focus on correctness.",
 		},
+		{
+  	  type: "provider",
+  	  replay: {
+  	    integration: "anthropic",
+  	    model: "MODEL_ID",
+  	    payload: {
+  	      type: "thinking",
+  	      thinking: "Example retained content.",
+  	      signature: "fake-signature-for-offline-testing",
+  	    },
+  	  },
+  	},
+		{
+  	  type: "tool-call",
+  	  id: "toolu_example",
+  	  name: "read_file",
+  	  input: {
+  	    path: "src/index.ts",
+  	  },
+  	},
+  	{
+  	  type: "tool-result",
+  	  callId: "toolu_example",
+  	  content: "export const answer = 42;",
+  	},
 	],
 };
 

@@ -1,13 +1,19 @@
 import type { ModelRequest } from "../../provider.js";
+import type { ConversationItem, JsonValue } from "../../protocol.js";
 
 interface TextBlock {
 	type: "text";
 	text: string;
 }
 
+interface ContentBlock {
+	type: string;
+	[field: string]: JsonValue;
+}
+
 interface WireMessage {
 	role: "user" | "assistant";
-	content: TextBlock[];
+	content: ContentBlock[];
 }
 
 export interface AnthropicRequestOptions {
@@ -20,6 +26,67 @@ export interface AnthropicRequestBody {
 	max_tokens: number;
 	system?: TextBlock[];
 	messages: WireMessage[];
+}
+
+function encodeBlock(item: ConversationItem, model: string): ContentBlock {
+	const replay = "replay" in item ? item.replay : undefined;
+	if (replay !== undefined) {
+		if (item.type === "message" && item.role !== "assistant") {
+			throw new Error("Native response replay belongs to assistant messages.");
+		}
+		if (
+			replay.integration !== "anthropic" ||
+			replay.model !== model ||
+			replay.upstream !== undefined
+		) {
+			throw new Error("Replay data does not match this direct Anthropic model.");
+		}
+
+		const payload = replay.payload;
+		if (
+			payload == null ||
+			typeof payload !== "object" ||
+			Array.isArray(payload) ||
+			typeof payload.type !== "string"
+		) {
+			throw new Error("Anthropic replay must contain one native content block.");
+		}
+		return {
+			...payload,
+			type: payload.type,
+		};
+	}
+
+	switch (item.type) {
+		case "message":
+			return {
+				type: "text",
+				text: item.content,
+			};
+		case "tool-call":
+			if (
+				item.input === null ||
+				typeof item.input !== "object" ||
+				Array.isArray(item.input)
+			) {
+				throw new Error("Anthropic tool input must be a JSON object.");
+			}
+
+			return {
+				type: "tool_use",
+				id: item.id,
+				name: item.name,
+				input: item.input,
+			};
+		case "tool-result":
+			return {
+				type: "tool_result",
+				tool_use_id: item.callId,
+				content: item.content,
+			};
+		case "provider":
+			throw new Error("A provider item requires replay data.");
+	}
 }
 
 export function encodeRequest(req: ModelRequest, opts: AnthropicRequestOptions): AnthropicRequestBody {
@@ -37,30 +104,39 @@ export function encodeRequest(req: ModelRequest, opts: AnthropicRequestOptions):
 	const messages: WireMessage[] = [];
 
 	for (const item of req.items) {
-		if (item.type !== "message") {
-			throw new Error(`Anthropic encoding for ${item.type} is not implemented yet.`);
-		}
-		
-		if (item.replay !== undefined) {
-			throw new Error("Anthropic replay encoding is not implemented yet.");
-		}
-
-		const block: TextBlock = {
-			type: "text",
-			text: item.content,
-		};
-
-		if (item.role === "system") {
-			system.push(block);
+		if (item.type === "message" && item.role === "system") {
+			if (item.replay !== undefined) {
+				throw new Error("System instructions cannot carry response replay data.");
+			}
+			system.push({
+				type: "text",
+				text: item.content,
+			});
 			continue;
 		}
 
+		let role: WireMessage["role"] = "assistant";
+		if (
+			item.type === "tool-result" ||
+			(item.type === "message" && item.role === "user")
+		) {
+			role = "user";
+		}
+		const block = encodeBlock(item, opts.model);
 		const previous = messages.at(-1);
-		if (previous?.role === item.role) {
-			previous!.content.push(block);
+		if (previous && previous.role === role) {
+			if (
+				block.type === "tool_result" &&
+				previous.content.some(
+					(existing) => existing.type !== "tool_result",
+				)
+			) {
+				throw new Error("Tool results must precede other user content.");
+			}
+			previous.content.push(block);
 		} else {
 			messages.push({
-				role: item.role,
+				role,
 				content: [block],
 			});
 		}
