@@ -10,5 +10,5 @@
 		"noEmit": true,
 		"emitDeclarationOnly": false
 	},
-	"include": ["./*.tsx"]
+	"include": ["./*.ts", "./*.tsx"]
 }
