@@ -78,4 +78,19 @@ export interface Usage {
 	reasoningTokens?: number;
 }
 
+export function readString(value: unknown, label: string): string {
+	if (typeof value !== "string") {
+		throw new Error(`${label} must be a string.`);
+	}
 
+	return value;
+}
+
+export function readNonEmptyString(value: unknown, label: string): string {
+	const str = readString(value, label)
+	if (str.trim() === "") {
+		throw new Error(`${label} must be a non-empty string.`);
+	}
+
+	return str;
+}
