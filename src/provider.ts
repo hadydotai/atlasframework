@@ -17,11 +17,33 @@ export interface ModelResponse {
 	raw?: JsonValue;
 }
 
+export type ModelEvent =
+	| {
+			type: "text-delta";
+			text: string;
+		}
+	| {
+			type: "reasoning-delta";
+			text: string;
+		}
+	| {
+			type: "done";
+			response: ModelResponse;
+		};
+
 export interface CallContext {
 	signal: AbortSignal;
 }
 
 export interface Provider {
-	complete(request: ModelRequest, context: CallContext): Promise<ModelResponse>;
+	complete(
+		request: ModelRequest,
+		context: CallContext,
+	): Promise<ModelResponse>;
+
+	stream?(
+		request: ModelRequest,
+		context: CallContext,
+	): AsyncIterable<ModelEvent>;
 }
 

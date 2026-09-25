@@ -6,7 +6,7 @@ import type {
 	StopReason,
 } from "../../protocol.js";
 
-function readObject(
+export function readObject(
 	value: JsonValue | undefined,
 	label: string,
 ): { [key: string]: JsonValue } {

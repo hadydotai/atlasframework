@@ -23,6 +23,7 @@ export type { RunOptions } from "./runtime.js";
 
 export type {
 	CallContext,
+	ModelEvent,
 	ModelRequest,
 	ModelResponse,
 	Provider,
