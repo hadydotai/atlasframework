@@ -7,7 +7,9 @@ import type {
 } from "./protocol.js";
 
 export interface ModelRequest {
-	items: readonly ConversationItem[];
+	readonly model: string;
+	readonly maxTokens: number;
+	readonly items: readonly ConversationItem[];
 }
 
 export interface ModelResponse {
