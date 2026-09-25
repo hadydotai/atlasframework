@@ -1,8 +1,17 @@
 export { createElement } from "./element.js";
-export type { AtlasElement, Child, ElementProps } from "./element.js";
 
-export { renderMessages } from "./renderer.js";
-export type { 
+export type {
+	AtlasElement,
+	Child,
+	ElementProps,
+} from "./element.js";
+
+export type {
+	AgentProps,
+	TurnPlan,
+} from "./renderer.js";
+
+export type {
 	JsonValue,
 	ReplayData,
 	Message,
@@ -19,7 +28,11 @@ export type {
 export { walk } from "./walk.js";
 
 export { createRuntime } from "./runtime.js";
-export type { RunOptions } from "./runtime.js";
+
+export type {
+	Execution,
+	RunOptions,
+} from "./runtime.js";
 
 export type {
 	CallContext,
