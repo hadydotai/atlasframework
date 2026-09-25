@@ -1,17 +1,8 @@
 import type { JsonValue } from "../../protocol.js";
+import { readString } from "../../protocol.js";
 import type { ModelEvent } from "../../provider.js";
 
 type JsonObject = { [key: string]: JsonValue };
-
-function readString(
-	value: JsonValue | undefined,
-	label: string,
-): string {
-	if (typeof value !== "string") {
-		throw new Error(`${label} must be a string.`);
-	}
-	return value;
-}
 
 export function createBlockAccumulator(initial: JsonObject) {
 	const block = structuredClone(initial);

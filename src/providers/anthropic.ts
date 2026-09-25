@@ -2,9 +2,8 @@ import type { ModelRequest, Provider } from "../provider.js";
 import { encodeRequest } from "./anthropic/request.js";
 import { decodeResponse } from "./anthropic/response.js";
 import { decodeStream } from "./anthropic/stream.js";
-import type { AnthropicRequestOptions } from "./anthropic/request.js";
 
-export interface AnthropicOptions extends AnthropicRequestOptions {
+export interface AnthropicOptions {
 	apiKey: string;
 	fetch?: typeof globalThis.fetch;
 }
@@ -34,7 +33,7 @@ export class AnthropicHttpError extends Error {
 }
 
 export function anthropic(opts: AnthropicOptions): Provider {
-	const { apiKey, model, maxTokens } = opts;
+	const { apiKey } = opts;
 	if (apiKey.trim().length === 0) {
 		throw new Error("An Anthropic API Key is required.");
 	}
@@ -47,7 +46,7 @@ export function anthropic(opts: AnthropicOptions): Provider {
 		stream: boolean,
 	): Promise<Response> {
 		const body = {
-			...encodeRequest(request, { model, maxTokens }),
+			...encodeRequest(request),
 			stream,
 		};
 
@@ -84,7 +83,7 @@ export function anthropic(opts: AnthropicOptions): Provider {
 			const response = await post(request, signal, false);
 			const text = await response.text();
 			signal.throwIfAborted();
-			return decodeResponse(text, model);
+			return decodeResponse(text, request.model);
 		},
 		async *stream(request, { signal }) {
 			const response = await post(request, signal, true);
@@ -105,7 +104,7 @@ export function anthropic(opts: AnthropicOptions): Provider {
 					throw new Error("Anthropic streaming response has no body.");
 				}
 
-				yield* decodeStream(response.body, model, signal);
+				yield* decodeStream(response.body, request.model, signal);
 			} finally {
 				try {
 					await response.body?.cancel();

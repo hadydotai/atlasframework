@@ -16,11 +16,6 @@ interface WireMessage {
 	content: ContentBlock[];
 }
 
-export interface AnthropicRequestOptions {
-	model: string;
-	maxTokens: number;
-}
-
 export interface AnthropicRequestBody {
 	model: string;
 	max_tokens: number;
@@ -89,13 +84,13 @@ function encodeBlock(item: ConversationItem, model: string): ContentBlock {
 	}
 }
 
-export function encodeRequest(req: ModelRequest, opts: AnthropicRequestOptions): AnthropicRequestBody {
-	if (opts.model.trim().length === 0) {
+export function encodeRequest(req: ModelRequest): AnthropicRequestBody {
+	if (req.model.trim().length === 0) {
 		throw new Error("An anthropic model ID is required.");
 	}
 	if (
-		!Number.isSafeInteger(opts.maxTokens) ||
-		opts.maxTokens < 0
+		!Number.isSafeInteger(req.maxTokens) ||
+		req.maxTokens < 0
 	) {
 		throw new Error("maxTokens must be a nonnegative integer.");
 	}
@@ -122,7 +117,7 @@ export function encodeRequest(req: ModelRequest, opts: AnthropicRequestOptions):
 		) {
 			role = "user";
 		}
-		const block = encodeBlock(item, opts.model);
+		const block = encodeBlock(item, req.model);
 		const previous = messages.at(-1);
 		if (previous && previous.role === role) {
 			if (
@@ -147,8 +142,8 @@ export function encodeRequest(req: ModelRequest, opts: AnthropicRequestOptions):
 	}
 
 	const body: AnthropicRequestBody = {
-		model: opts.model,
-		max_tokens: opts.maxTokens,
+		model: req.model,
+		max_tokens: req.maxTokens,
 		messages,
 	};
 
