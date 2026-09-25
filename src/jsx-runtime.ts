@@ -1,6 +1,7 @@
 import {createElement } from "./element.js";
 import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
 import type { Message } from "./protocol.js";
+import type { AgentProps } from "./renderer.js";
 
 export { Fragment } from "./element.js";
 
@@ -31,10 +32,7 @@ export namespace JSX {
 	}
 
 	export interface IntrinsicElements {
-		agent: {
-			name: string;
-			children?: Child;
-		};
+		agent: AgentProps;
 
 		message: {
 			role: Message["role"];
