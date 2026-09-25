@@ -2,6 +2,7 @@
 	"extends": "../tsconfig.json",
 	"compilerOptions": {
 		"rootDir": "..",
+		"types": ["node"],
 		"paths": {
 			"atlasframework": ["../src/index.ts"],
 			"atlasframework/jsx-runtime": ["../src/jsx-runtime.ts"],
