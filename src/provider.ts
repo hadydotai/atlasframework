@@ -5,11 +5,13 @@ import type {
 	StopReason,
 	Usage,
 } from "./protocol.js";
+import type { ToolSpec } from "./tool.js";
 
 export interface ModelRequest {
 	readonly model: string;
 	readonly maxTokens: number;
 	readonly items: readonly ConversationItem[];
+	readonly tools?: readonly ToolSpec[];
 }
 
 export interface ModelResponse {

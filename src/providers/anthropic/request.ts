@@ -1,5 +1,6 @@
 import type { ModelRequest } from "../../provider.js";
 import type { ConversationItem, JsonValue } from "../../protocol.js";
+import type { ToolSpec } from "../../tool.js";
 
 interface TextBlock {
 	type: "text";
@@ -16,11 +17,18 @@ interface WireMessage {
 	content: ContentBlock[];
 }
 
+interface WireTool {
+	name: string;
+	description: string;
+	input_schema: ToolSpec["inputSchema"];
+}
+
 export interface AnthropicRequestBody {
 	model: string;
 	max_tokens: number;
 	system?: TextBlock[];
 	messages: WireMessage[];
+	tools?: WireTool[];
 }
 
 function encodeBlock(item: ConversationItem, model: string): ContentBlock {
@@ -149,6 +157,14 @@ export function encodeRequest(req: ModelRequest): AnthropicRequestBody {
 
 	if (system.length > 0) {
 		body.system = system;
+	}
+
+	if (req.tools !== undefined && req.tools.length > 0) {
+		body.tools = req.tools.map((tool) => ({
+			name: tool.name,
+			description: tool.description,
+			input_schema: tool.inputSchema,
+		}));
 	}
 
 	return body;
