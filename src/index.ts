@@ -25,6 +25,12 @@ export type {
 	Usage,
 } from "./protocol.js";
 
+export type {
+	ToolSpec,
+	ToolContext,
+	Tool,
+} from "./tool.js";
+
 export { walk } from "./walk.js";
 
 export { createRuntime } from "./runtime.js";
