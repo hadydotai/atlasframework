@@ -127,9 +127,14 @@ function collectReviewerInput(): ReviewerInput | undefined {
 	return input;
 }
 
-function Reviewer({ input }: { input: ReviewerInput }) {
+function Reviewer({ input, model }: { input: ReviewerInput; model: string; }) {
 	return (
-		<agent name="staged-change-reviewer">
+		<agent
+			name="staged-change-reviewer"
+			provider="anthropic"
+			model={model}
+			maxTokens={8_000}
+		>
 			<message role="system">
 			{`Review the staged changes for concrete bugs introduced by this
 				changeset.
@@ -198,28 +203,44 @@ function requireEnv(name: string): string {
 }
 
 async function review(input: ReviewerInput): Promise<void> {
-	const runtime = createRuntime(
-		anthropic({
+	const runtime = createRuntime({
+		anthropic: anthropic({
 			apiKey: requireEnv("ANTHROPIC_API_KEY"),
-			model: requireEnv("ANTHROPIC_REVIEWER_MODEL"),
-			maxTokens: 8_000, // TODO(@hadydotai): Is this enough?
 		}),
-	);
+	});
+
 	const controller = new AbortController();
 	function onInterrupt() {
 		controller.abort(new Error("Review cancelled."));
 	}
 
+	const execution = runtime.createExecution(
+			<Reviewer 
+				input={input}
+				model={requireEnv("ANTHROPIC_REVIEWER_MODEL")}
+			/>,
+			{ signal: controller.signal },
+	);
+
+	// NOTE(@hadydotai): Stays here after execution creation and provider resolution
+	// otherwise we throw and leak the SIGINT handler
+	process.once("SIGINT", onInterrupt);
+
+	const inspectOnly = process.argv.includes("--inspect");
+	const inspectAndRun = process.argv.includes("--inspect-and-run");
+
 	let response: ModelResponse | undefined;
 	let receivedText = false;
 
-	process.once("SIGINT", onInterrupt);
 
 	try {
-		for await (const event of runtime.stream(
-			<Reviewer input={input} />,
-			{ signal: controller.signal },
-		)) {
+		if (inspectOnly || inspectAndRun) {
+			const plan = await execution.inspect();
+			console.error(JSON.stringify(plan, null, 2));
+			if (inspectOnly) return;
+		}
+
+		for await (const event of execution.stream()) {
 			switch (event.type) {
 				case "text-delta":
 					process.stdout.write(event.text);
