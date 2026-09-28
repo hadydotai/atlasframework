@@ -2,6 +2,7 @@ import {createElement } from "./element.js";
 import type { AtlasElement, Child, Component, ElementProps } from "./element.js";
 import type { Message } from "./protocol.js";
 import type { AgentProps } from "./renderer.js";
+import type { Tool } from "./tool.js";
 
 export { Fragment } from "./element.js";
 
@@ -38,5 +39,10 @@ export namespace JSX {
 			role: Message["role"];
 			children?: Child;
 		};
+
+		tool: {
+			use: Tool;
+			children?: never; // NOTE(@hadydotai): We'll disallow this, any usecases for it?
+		}
 	}
 }

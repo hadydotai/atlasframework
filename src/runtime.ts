@@ -5,7 +5,7 @@ import type {
 	Provider,
 } from "./provider.js";
 import { renderTurn } from "./renderer.js";
-import type { TurnPlan } from "./renderer.js";
+import type { RenderedTurn, TurnPlan } from "./renderer.js";
 
 export interface RunOptions {
 	signal?: AbortSignal;
@@ -39,7 +39,7 @@ export function createRuntime(
 		const signal = opts.signal ?? new AbortController().signal;
 
 		let preparation: Promise<{
-			turn: TurnPlan;
+			rendered: RenderedTurn;
 			provider: Provider;
 		}> | undefined;
 		let started = false;
@@ -48,11 +48,11 @@ export function createRuntime(
 			if (preparation === undefined) {
 				preparation = Promise.resolve().then(() => {
 					signal.throwIfAborted();
-					const turn = renderTurn(tree);
+					const renderedTurn = renderTurn(tree);
 					signal.throwIfAborted();
 
-					const provider = resolveProvider(turn.provider);
-					return { turn, provider };
+					const provider = resolveProvider(renderedTurn.plan.provider);
+					return { rendered: renderedTurn, provider };
 				});
 			}
 
@@ -61,7 +61,7 @@ export function createRuntime(
 
 		async function inspect(): Promise<TurnPlan> {
 			const prepared = await prepare();
-			return prepared.turn;
+			return prepared.rendered.plan;
 		}
 
 		async function* stream(): AsyncGenerator<ModelEvent> {
@@ -70,14 +70,14 @@ export function createRuntime(
 			}
 			started = true;
 
-			const { turn, provider } = await prepare();
+			const { rendered: renderedTurn, provider } = await prepare();
 			signal.throwIfAborted();
 
 			const context = { signal };
 			let response: ModelResponse | undefined;
 
 			if (provider.stream) {
-				for await (const event of provider.stream(turn.request, context)) {
+				for await (const event of provider.stream(renderedTurn.plan.request, context)) {
 					signal.throwIfAborted();
 					if (response !== undefined) {
 						throw new Error("Provider emitted an event after its `done` event.");
@@ -91,7 +91,7 @@ export function createRuntime(
 					}
 				}
 			} else {
-				response = await provider.complete(turn.request, context);
+				response = await provider.complete(renderedTurn.plan.request, context);
 			}
 
 			signal.throwIfAborted();

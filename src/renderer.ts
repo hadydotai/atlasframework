@@ -1,8 +1,9 @@
 import type { Child } from "./element.js";
-import type { Message } from "./protocol.js";
+import type { JsonValue, Message } from "./protocol.js";
 import { readNonEmptyString } from "./protocol.js";
 import { walk } from "./walk.js";
 import type { ModelRequest } from "./provider.js";
+import type { Tool, ToolSpec } from "./tool.js";
 
 export interface AgentProps {
 	name: string;
@@ -18,9 +19,98 @@ export interface TurnPlan {
 	readonly request: ModelRequest;
 }
 
-export function renderTurn(tree: Child): TurnPlan {
+export interface RenderedTurn {
+	readonly plan: TurnPlan;
+	readonly tools: ReadonlyMap<string, Tool>;
+}
+
+function snapshotJson(value: unknown, ancestors = new Set<object>()): JsonValue {
+	if (
+		value === null ||
+		typeof value === "string" ||
+		typeof value === "boolean"
+	) {
+		return value;
+	}
+
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+
+	if (typeof value !== "object") {
+		throw new Error("<tool> schemas must contain only valid JSON values.");
+	}
+
+	if (ancestors.has(value)) {
+		throw new Error("<tool> schemas cannot contain circular references.");
+	}
+
+	ancestors.add(value);
+	try {
+		let copy: JsonValue;
+		if (Array.isArray(value)) {
+			copy = Array.from(value, (item) => snapshotJson(item, ancestors));
+		} else {
+			const proto = Object.getPrototypeOf(value);
+			if (proto !== Object.prototype && proto !== null) {
+				throw new Error("<tool> schemas must contain plain JSON objects.");
+			}
+			copy = Object.fromEntries(
+				Object.entries(value).map(([key, item]) => 
+					[key, snapshotJson(item, ancestors)]
+			));
+		}
+		Object.freeze(copy);
+		return copy;
+	} finally {
+		ancestors.delete(value);
+	}
+}
+
+function snapshotTool(value: unknown): Tool {
+	if (value === null || typeof value !== "object") {
+		throw new Error("<tool> needs a Tool in its use prop.");
+	}
+
+	const candidate = value as Partial<Tool>;
+	const spec = candidate.spec;
+
+	if (
+		spec === null ||
+		typeof spec !== "object" ||
+		typeof candidate.call !== "function"
+	) {
+		throw new Error("<tool> needs a spec and a function to call.");
+	}
+
+	const name = readNonEmptyString(spec.name, "Tool name");
+	const description = readNonEmptyString(spec.description, "Tool description");
+	const schema = snapshotJson(spec.inputSchema);
+
+	if (
+		schema === null ||
+		typeof schema !== "object" ||
+		Array.isArray(schema) ||
+		schema.type !== "object"
+	) {
+		throw new Error("<tool> input schema must have type object.");
+	}
+
+	const inputSchema: ToolSpec["inputSchema"] = Object.freeze({
+		...schema,
+		type: "object",
+	});
+
+	return Object.freeze({
+		spec: Object.freeze({ name, description, inputSchema }),
+		call: candidate.call.bind(value),
+	});
+}
+
+export function renderTurn(tree: Child): RenderedTurn {
 	const state: { agent?: AgentProps } = {};
 	const messages: Message[] = [];
+	const tools = new Map<string, Tool>();
 
 	walk(tree, (node, depth) => {
 		if (typeof node !== "object") {
@@ -34,10 +124,6 @@ export function renderTurn(tree: Child): TurnPlan {
 				throw new Error("<agent> tags cannot have nested <agent> tags.");
 			}
 
-			// TODO(@hadydotai): I'd like those to actually be typed, we already know
-			// for our intrinsic tags what props we should accept and it should 
-			// be a closed set for intrinsics. Currently it isn't, we treat all element
-			// props the same whether they're framework native or user land.
 			const maxTokens = node.props.maxTokens;
 			if (
 				typeof maxTokens !== "number" ||
@@ -62,6 +148,19 @@ export function renderTurn(tree: Child): TurnPlan {
 		// in 101 different ways to achieve the same outcome.
 		if (state.agent === undefined || depth === 0) {
 			throw new Error("<message> tags must be inside the root <agent>.");
+		}
+
+		if (node.type === "tool") {
+			if (node.props.children !== undefined) {
+				throw new Error("<tool> cannot contain children.");
+			}
+
+			const tool = snapshotTool(node.props.use);
+			if (tools.has(tool.spec.name)) {
+				throw new Error(`Duplicate tool name: ${tool.spec.name}`);
+			}
+			tools.set(tool.spec.name, tool);
+			return false;
 		}
 
 		if (node.type !== "message") {
@@ -111,18 +210,26 @@ export function renderTurn(tree: Child): TurnPlan {
 	}
 
 	const items = Object.freeze(messages.map((msg) => Object.freeze(msg)));
+	const specs = Object.freeze(
+		Array.from(tools.values(), (tool) => tool.spec),
+	);
+
 	// TODO(@hadydotai): I'm thinking that perhaps we'll be able to even change
 	// those values from one turn to the next, and I'm wondering if we'll need something
 	// similar to hooks in React. Something like `useTurnState` for values that
 	// change from one turn to the other. Maybe? I need to understand how React
 	// invalidates part of its tree in response to a state mutation.
-	return Object.freeze({
+	const request: ModelRequest = Object.freeze({
+		model: agent.model,
+		maxTokens: agent.maxTokens,
+		items,
+		...(specs.length > 0 ? { tools: specs } : {}),
+	});
+
+	const plan: TurnPlan = Object.freeze({
 		agent: agent.name,
 		provider: agent.provider,
-		request: Object.freeze({
-			model: agent.model,
-			maxTokens: agent.maxTokens,
-			items,
-		}),
+		request,
 	});
+	return { plan, tools };
 }
