@@ -38,7 +38,10 @@ export function useConversation(): Conversation {
 	return readContext("useConversation").conversation;
 }
 
-export function withHookContext<T>(context: HookContext, evaluate: () => T): T {
+export function withHookContext<T>(
+	context: HookContext | undefined,
+	evaluate: () => T
+): T {
 	const previousContext = activeContext;
 	activeContext = context;
 
