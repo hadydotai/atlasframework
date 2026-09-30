@@ -8,7 +8,7 @@ export type Child =
 	| boolean
 	| null
 	| undefined
-	| Child[];
+	| readonly Child[];
 
 export interface ElementProps {
 	children?: Child;

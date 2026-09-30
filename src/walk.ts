@@ -6,6 +6,10 @@ type Visitor = (
 	depth: number,
 ) => void | false;
 
+function isChildArray(child: Child): child is readonly Child[] {
+	return Array.isArray(child);
+}
+
 // NOTE(@hadydotai): Not sure how React does, will need to revisit
 // but I reckon a simple depth-first pre-order is sufficient for most
 // agentic usecases. We might find it useful to traverse differently in
@@ -20,7 +24,7 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 	// NOTE(@hadydotai): Arrays group sibilings so we're not
 	// increasing the depth here. I think.. will have to
 	// revisit this.
-	if (Array.isArray(child)) {
+	if (isChildArray(child)) {
 		for (const item of child) {
 			walk(item, visit, depth);
 		}
