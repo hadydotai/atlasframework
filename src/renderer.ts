@@ -1,9 +1,14 @@
 import type { Child } from "./element.js";
-import type { JsonValue, Message } from "./protocol.js";
+import type { Conversation, ConversationEntry } from "./conversation.js";
+import {
+	createConversationMessage,
+	snapshotConversation,
+} from "./conversation.js";
+import type { ConversationItem, JsonValue, Message } from "./protocol.js";
 import { readNonEmptyString } from "./protocol.js";
-import { walk } from "./walk.js";
 import type { ModelRequest } from "./provider.js";
 import type { Tool, ToolSpec } from "./tool.js";
+import { walk } from "./walk.js";
 
 export interface AgentProps {
 	name: string;
@@ -21,6 +26,7 @@ export interface TurnPlan {
 
 export interface RenderedTurn {
 	readonly plan: TurnPlan;
+	readonly conversation: Conversation;
 	readonly tools: ReadonlyMap<string, Tool>;
 }
 
@@ -109,12 +115,20 @@ function snapshotTool(value: unknown): Tool {
 
 export function renderTurn(tree: Child): RenderedTurn {
 	const state: { agent?: AgentProps } = {};
-	const messages: Message[] = [];
+	const entries: ConversationEntry[] = [];
 	const tools = new Map<string, Tool>();
 
 	walk(tree, (node, depth) => {
 		if (typeof node !== "object") {
 			throw new Error("Free form text must sit inside a <message> boundary.");
+		}
+
+		if ("kind" in node) {
+			if (state.agent === undefined || depth === 0) {
+				throw new Error("Conversation records must be inside the root <agent>.");
+			}
+			entries.push(node);
+			return false;
 		}
 
 		if (node.type === "agent") {
@@ -192,12 +206,13 @@ export function renderTurn(tree: Child): RenderedTurn {
 			parts.push(String(child));
 		});
 
-		messages.push({
-			type: "message",
-			role,
-			content: parts.join(""),
-		})
-
+		entries.push(
+			createConversationMessage(
+				globalThis.crypto.randomUUID(),
+				role,
+				parts.join(""),
+			),
+		);
 		return false;
 	});
 
@@ -205,11 +220,17 @@ export function renderTurn(tree: Child): RenderedTurn {
 	if (agent === undefined) {
 		throw new Error("A turn needs a root <agent>.");
 	}
-	if (messages.length === 0) {
-		throw new Error("An agent turn needs at least one message.");
+	const conversation = snapshotConversation(entries);
+	const items = Object.freeze(
+		conversation.flatMap<ConversationItem>((entry) =>
+			entry.kind === "message"
+				? [entry.message]
+				: [...entry.output, ...entry.results]),
+	);
+	if (items.length === 0) {
+		throw new Error("An agent turn needs conversation content.");
 	}
 
-	const items = Object.freeze(messages.map((msg) => Object.freeze(msg)));
 	const specs = Object.freeze(
 		Array.from(tools.values(), (tool) => tool.spec),
 	);
@@ -231,5 +252,5 @@ export function renderTurn(tree: Child): RenderedTurn {
 		provider: agent.provider,
 		request,
 	});
-	return { plan, tools };
+	return { plan, conversation, tools };
 }
