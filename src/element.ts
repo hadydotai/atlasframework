@@ -15,7 +15,7 @@ export interface ElementProps {
 	[name: string]: unknown;
 }
 
-export type Component = (props: any) => Child;
+export type Component = (props: any) => Child | Promise<Child>;
 
 export function Fragment(
 	props: { children?: Child },

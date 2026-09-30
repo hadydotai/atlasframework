@@ -1,4 +1,5 @@
 import type { Child } from "./element.js";
+import type { HookContext } from "./hooks.js";
 import type {
 	ModelEvent,
 	ModelResponse,
@@ -6,6 +7,8 @@ import type {
 } from "./provider.js";
 import { renderTurn } from "./renderer.js";
 import type { RenderedTurn, TurnPlan } from "./renderer.js";
+import type { ToolCall, ToolResult } from "./protocol.js";
+import { readNonEmptyString, readString } from "./protocol.js";
 
 export interface RunOptions {
 	signal?: AbortSignal;
@@ -15,6 +18,7 @@ export interface Execution {
 	inspect(): Promise<TurnPlan>;
 	stream(): AsyncGenerator<ModelEvent>;
 	run(): Promise<ModelResponse>;
+	callTool(callId: string): Promise<ToolResult>;
 }
 
 export function createRuntime(
@@ -43,12 +47,19 @@ export function createRuntime(
 			provider: Provider;
 		}> | undefined;
 		let started = false;
+		let toolCalls: Map<string, ToolCall> | undefined;
+		const invocations = new Map<string, Promise<ToolResult>>();
 
 		function prepare() {
 			if (preparation === undefined) {
-				preparation = Promise.resolve().then(() => {
+				preparation = Promise.resolve().then(async () => {
 					signal.throwIfAborted();
-					const renderedTurn = renderTurn(tree);
+					const context: HookContext = Object.freeze({
+						turn: Object.freeze({ index: 0, signal }),
+						conversation: Object.freeze([]),
+					});
+
+					const renderedTurn = await renderTurn(tree, context);
 					signal.throwIfAborted();
 
 					const provider = resolveProvider(renderedTurn.plan.provider);
@@ -62,6 +73,31 @@ export function createRuntime(
 		async function inspect(): Promise<TurnPlan> {
 			const prepared = await prepare();
 			return prepared.rendered.plan;
+		}
+
+		function captureToolCalls(response: ModelResponse): void {
+			if (response.stopReason !== "tool-use") { return; }
+			const calls = new Map<string, ToolCall>();
+			for (const item of response.items) {
+				if (item.type !== "tool-call") { continue; }
+
+				const id = readNonEmptyString(item.id, "Tool call ID");
+				const name = readNonEmptyString(item.name, "Tool call name");
+				if (calls.has(id)) {
+					throw new Error(`Duplicate tool call ID: ${id}`);
+				}
+				calls.set(id, {
+					type: "tool-call",
+					id,
+					name,
+					input: structuredClone(item.input),
+				});
+			}
+
+			if (calls.size === 0) {
+				throw new Error("Provider stopped for tool use without returning any tool calls.");
+			}
+			toolCalls = calls;
 		}
 
 		async function* stream(): AsyncGenerator<ModelEvent> {
@@ -99,6 +135,8 @@ export function createRuntime(
 				throw new Error("Provider stream ended without a `done` event.");
 			}
 
+			captureToolCalls(response);
+
 			yield { type: "done", response };
 		}
 
@@ -112,7 +150,45 @@ export function createRuntime(
 			throw new Error("Execution ended without a response.");
 		}
 
-		return { inspect, stream, run };
+		async function callTool(callId: string): Promise<ToolResult> {
+			if (toolCalls === undefined) {
+				throw new Error("Tools can be invoked only after a completed tool-use response.");
+			}
+
+			const call = toolCalls.get(callId);
+			if (call === undefined) {
+				throw new Error(`Unknown tool call ID: ${callId}`);
+			}
+
+			const { rendered: renderedTurn } = await prepare();
+			let invocation = invocations.get(callId);
+
+			if (invocation === undefined) {
+				const tool = renderedTurn.tools.get(call.name);
+				if (tool === undefined) {
+					throw new Error(`Tool was not declared for this turn: ${call.name}`);
+				}
+				invocation = Promise.resolve().then(async () => {
+					signal.throwIfAborted();
+					const output = await tool.call(call.input, {
+						callId,
+						signal
+					});
+					signal.throwIfAborted();
+					const content = readString(output, "Tool result");
+
+					return Object.freeze({
+						type: "tool-result",
+						callId,
+						content,
+					});
+				});
+				invocations.set(callId, invocation);
+			}
+			return invocation;
+		}
+
+		return { inspect, stream, run, callTool };
 	}
 
 	function stream(tree: Child, opts: RunOptions = {}): AsyncGenerator<ModelEvent> {

@@ -4,7 +4,8 @@ import {
 	createConversationMessage,
 	snapshotConversation,
 } from "./conversation.js";
-import type { ConversationItem, JsonValue, Message } from "./protocol.js";
+import type { HookContext } from "./hooks.js";
+import type { ConversationItem, JsonValue } from "./protocol.js";
 import { readNonEmptyString } from "./protocol.js";
 import type { ModelRequest } from "./provider.js";
 import type { Tool, ToolSpec } from "./tool.js";
@@ -113,12 +114,15 @@ function snapshotTool(value: unknown): Tool {
 	});
 }
 
-export function renderTurn(tree: Child): RenderedTurn {
+export async function renderTurn(
+	tree: Child,
+	context: HookContext,
+): Promise<RenderedTurn> {
 	const state: { agent?: AgentProps } = {};
 	const entries: ConversationEntry[] = [];
 	const tools = new Map<string, Tool>();
 
-	walk(tree, (node, depth) => {
+	await walk(tree, async (node, depth) => {
 		if (typeof node !== "object") {
 			throw new Error("Free form text must sit inside a <message> boundary.");
 		}
@@ -199,12 +203,12 @@ export function renderTurn(tree: Child): RenderedTurn {
 
 		const parts: string[] = [];
 
-		walk(node.props.children, (child) => {
+		await walk(node.props.children, (child) => {
 			if (typeof child === "object") {
 				throw new Error("A <message> can contain text but not nested elements.");
 			}
 			parts.push(String(child));
-		});
+		}, 0, context);
 
 		entries.push(
 			createConversationMessage(
@@ -214,7 +218,7 @@ export function renderTurn(tree: Child): RenderedTurn {
 			),
 		);
 		return false;
-	});
+	}, 0, context);
 
 	const agent = state.agent;
 	if (agent === undefined) {

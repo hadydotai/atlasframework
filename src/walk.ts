@@ -1,10 +1,12 @@
 import type { ConversationEntry } from "./conversation.js";
 import type { AtlasElement, Child } from "./element.js";
+import type { HookContext } from "./hooks.js";
+import { withHookContext } from "./hooks.js";
 
 type Visitor = (
 	node: AtlasElement | ConversationEntry | string | number,
 	depth: number,
-) => void | false;
+) => void | false | Promise<void | false>;
 
 function isChildArray(child: Child): child is readonly Child[] {
 	return Array.isArray(child);
@@ -16,23 +18,29 @@ function isChildArray(child: Child): child is readonly Child[] {
 // the future but for now, I'm imaging this as a a plain representation
 // of a prompt turn by turn constructed declaratively. So I doubt I'll need
 // something advanced here.
-export function walk(child: Child, visit: Visitor, depth = 0): void {
+export async function walk(
+	child: Child, 
+	visit: Visitor, 
+	depth = 0,
+	context?: HookContext,
+): Promise<void> {
+	const signal = context?.turn.signal;
+	signal?.throwIfAborted();
+
 	if (child == null || typeof child === "boolean") {
 		return;
 	}
 
-	// NOTE(@hadydotai): Arrays group sibilings so we're not
-	// increasing the depth here. I think.. will have to
-	// revisit this.
 	if (isChildArray(child)) {
 		for (const item of child) {
-			walk(item, visit, depth);
+			await walk(item, visit, depth, context);
 		}
 		return;
 	}
 
 	if (typeof child === "object" && "kind" in child) {
-		visit(child, depth);
+		await visit(child, depth);
+		signal?.throwIfAborted();
 		return;
 	}
 
@@ -40,12 +48,24 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 		typeof child === "object" &&
 		typeof child.type === "function"
 	) {
-		const output = child.type(child.props);
-		walk(output, visit, depth);
+		const component = child.type;
+		// NOTE(@hadydotai): components will get hook context as it starts
+		// executing, we restore that context (the whole point behind 
+		// `withHookContext`) before await the result,
+		// so another execution (I'm thinking nested) doesn't accidentally inherit
+		// it
+		const output = withHookContext(context, () => component(child.props));
+		const resolved = await output;
+		signal?.throwIfAborted();
+
+		await walk(resolved, visit, depth, context);
 		return;
 	}
 
-	if (visit(child, depth) === false) {
+	const result = await visit(child, depth);
+	signal?.throwIfAborted();
+
+	if (result === false) {
 		return;
 	}
 
@@ -54,6 +74,6 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 	// I probably need named tag on AtlasElement but this at this
 	// point should be an AtlasElement with children.
 	if (typeof child === "object") {
-		walk(child.props.children, visit, depth + 1);
+		await walk(child.props.children, visit, depth + 1, context);
 	}
 }
