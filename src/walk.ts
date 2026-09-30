@@ -1,7 +1,8 @@
+import type { ConversationEntry } from "./conversation.js";
 import type { AtlasElement, Child } from "./element.js";
 
 type Visitor = (
-	node: AtlasElement | string | number,
+	node: AtlasElement | ConversationEntry | string | number,
 	depth: number,
 ) => void | false;
 
@@ -23,6 +24,11 @@ export function walk(child: Child, visit: Visitor, depth = 0): void {
 		for (const item of child) {
 			walk(item, visit, depth);
 		}
+		return;
+	}
+
+	if (typeof child === "object" && "kind" in child) {
+		visit(child, depth);
 		return;
 	}
 

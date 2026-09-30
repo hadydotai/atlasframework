@@ -1,5 +1,8 @@
+import type { ConversationEntry } from "./conversation.js";
+
 export type Child =
 	| AtlasElement
+	| ConversationEntry
 	| string
 	| number
 	| boolean
