@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Conversation } from "./conversation.js";
 import type { ToolResult } from "./protocol.js";
 import type { ModelResponse } from "./provider.js";
@@ -21,13 +22,14 @@ export interface HookContext {
 	readonly conversation: Conversation;
 }
 
-let activeContext: HookContext | undefined;
+const contextStorage = new AsyncLocalStorage<HookContext | undefined>();
 
 function readContext(hook: string): HookContext {
-	if (activeContext === undefined) {
+	const context = contextStorage.getStore();
+	if (context === undefined) {
 		throw new Error(`${hook}() can only be called while Atlas is evaluating a component.`);
 	}
-	return activeContext;
+	return context;
 }
 
 export function useTurn(): TurnContext {
@@ -42,12 +44,5 @@ export function withHookContext<T>(
 	context: HookContext | undefined,
 	evaluate: () => T
 ): T {
-	const previousContext = activeContext;
-	activeContext = context;
-
-	try {
-		return evaluate();
-	} finally {
-		activeContext = previousContext;
-	}
+	return contextStorage.run(context, evaluate);
 }
