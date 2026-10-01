@@ -46,6 +46,7 @@ export { createRuntime } from "./runtime.js";
 
 export type {
 	Execution,
+	ExecutionEvent,
 	RunOptions,
 } from "./runtime.js";
 
