@@ -1,19 +1,61 @@
 import type { Child } from "./element.js";
-import type { HookContext } from "./hooks.js";
+import type { Conversation } from "./conversation.js";
+import { createConversationExchange } from "./conversation.js";
+import type { CompletedTurn, HookContext } from "./hooks.js";
 import type {
 	ModelEvent,
 	ModelResponse,
 	Provider,
 } from "./provider.js";
-import { renderTurn } from "./renderer.js";
-import type { RenderedTurn, TurnPlan } from "./renderer.js";
 import type { ToolCall, ToolResult } from "./protocol.js";
 import { readNonEmptyString, readString } from "./protocol.js";
+import { renderTurn } from "./renderer.js";
+import type { RenderedTurn, TurnPlan } from "./renderer.js";
+import { snapshot } from "./snapshot.js";
 
 export interface RunOptions {
 	signal?: AbortSignal;
 	maxTurns?: number;
 }
+
+export type ExecutionEvent =
+	| (Exclude<ModelEvent, { type: "done" }> & {
+			readonly index: number;
+		})
+	| {
+			readonly type: "turn-start";
+			readonly index: number;
+			readonly plan: TurnPlan;
+		}
+	| {
+			readonly type: "turn-end";
+			readonly turn: CompletedTurn;
+		}
+	| {
+			// NOTE(@hadydotai): Model completion which normally would be
+			// a "done" `ModelEvent` would become `model-response` here.
+			readonly type: "model-response";
+			readonly index: number;
+			readonly response: ModelResponse
+		}
+	| {
+			readonly type: "tool-start";
+			readonly index: number;
+			readonly call: ToolCall;
+		}
+	|
+		{
+			readonly type: "tool-end";
+			readonly index: number;
+			readonly result: ToolResult;
+		}
+	| {
+			// TODO(@hadydotai): I'm not entirely sure I like this
+			// but we need an execution "end" event which is different
+			// from "turn-end"
+			readonly type: "done";
+			readonly response: ModelResponse;
+		}
 
 export interface Execution {
 	inspect(): Promise<TurnPlan>;
