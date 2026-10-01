@@ -4,6 +4,7 @@ import type {
 	ToolResult,
 } from "./protocol.js";
 import { readNonEmptyString, readString } from "./protocol.js";
+import { snapshot } from "./snapshot.js";
 
 export interface ConversationMessage {
 	readonly kind: "message";
@@ -23,30 +24,6 @@ export type ConversationEntry =
 	| ConversationExchange;
 
 export type Conversation = readonly ConversationEntry[];
-
-function snapshot<T>(value: T): T {
-	const copy = structuredClone(value);
-	const seen = new WeakSet<object>();
-
-	function freeze(current: unknown): void {
-		if (
-			current === null ||
-			typeof current !== "object" ||
-			seen.has(current)
-		) {
-			return;
-		}
-
-		seen.add(current);
-		for (const child of Object.values(current)) {
-			freeze(child);
-		}
-
-		Object.freeze(current);
-	}
-	freeze(copy);
-	return copy;
-}
 
 export function createConversationMessage(
 	id: string,
