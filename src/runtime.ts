@@ -12,6 +12,7 @@ import { readNonEmptyString, readString } from "./protocol.js";
 
 export interface RunOptions {
 	signal?: AbortSignal;
+	maxTurns?: number;
 }
 
 export interface Execution {
