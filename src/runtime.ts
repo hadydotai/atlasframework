@@ -59,9 +59,8 @@ export type ExecutionEvent =
 
 export interface Execution {
 	inspect(): Promise<TurnPlan>;
-	stream(): AsyncGenerator<ModelEvent>;
+	stream(): AsyncGenerator<ExecutionEvent>;
 	run(): Promise<ModelResponse>;
-	callTool(callId: string): Promise<ToolResult>;
 }
 
 export function createRuntime(
@@ -70,117 +69,223 @@ export function createRuntime(
 	const registry = Object.freeze({ ...providers });
 
 	function resolveProvider(name: string): Provider {
-		if (!Object.hasOwn(registry, name)) {
+		if (!Object.hasOwn(registry, name) || registry[name] === undefined) {
 			throw new Error(`Unknown provider: ${name}`);
 		}
-
-		const provider = registry[name];
-		if (provider === undefined) {
-			throw new Error(`Provider is not configured: ${name}`);
-		}
-
-		return provider;
+		return registry[name];
 	}
 
 	function createExecution(tree: Child, opts: RunOptions = {}): Execution {
 		const signal = opts.signal ?? new AbortController().signal;
 
+		if (
+			opts.maxTurns !== undefined &&
+			(!Number.isSafeInteger(opts.maxTurns) || opts.maxTurns <= 0)
+		) {
+				throw new Error("maxTurns must either be unset or set to a positive integer above zero.");
+			}
+
+		let started = false;
+		let context: HookContext = Object.freeze({
+			turn: Object.freeze({ index: 0, signal }),
+			conversation: Object.freeze([]),
+		});
+
 		let preparation: Promise<{
 			rendered: RenderedTurn;
 			provider: Provider;
 		}> | undefined;
-		let started = false;
-		let toolCalls: Map<string, ToolCall> | undefined;
-		const invocations = new Map<string, Promise<ToolResult>>();
 
 		function prepare() {
 			if (preparation === undefined) {
+				const currentContext = context;
 				preparation = Promise.resolve().then(async () => {
 					signal.throwIfAborted();
-					const context: HookContext = Object.freeze({
-						turn: Object.freeze({ index: 0, signal }),
-						conversation: Object.freeze([]),
-					});
-
-					const renderedTurn = await renderTurn(tree, context);
+					const renderedTurn = await renderTurn(tree, currentContext);
 					signal.throwIfAborted();
-
-					const provider = resolveProvider(renderedTurn.plan.provider);
-					return { rendered: renderedTurn, provider };
+					return { 
+						rendered: renderedTurn,
+						provider: resolveProvider(renderedTurn.plan.provider),
+					};
 				});
 			}
-
 			return preparation;
 		}
 
 		async function inspect(): Promise<TurnPlan> {
-			const prepared = await prepare();
-			return prepared.rendered.plan;
+			return (await prepare()).rendered.plan;
 		}
 
-		function captureToolCalls(response: ModelResponse): void {
-			if (response.stopReason !== "tool-use") { return; }
-			const calls = new Map<string, ToolCall>();
-			for (const item of response.items) {
-				if (item.type !== "tool-call") { continue; }
+		function bindToolCalls(
+			response: ModelResponse,
+			rendered: RenderedTurn,
+		) {
+			const ids = new Set<string>();
+			const bindings = response.items
+				.filter((item): item is ToolCall => item.type === "tool-call")
+				.map((call) => {
+					const id = readNonEmptyString(call.id, "Tool call ID");
+					const name = readNonEmptyString(call.name, "Tool call name");
+					if (ids.has(id)) {
+						throw new Error(`Duplicate tool call ID: ${id}`);
+					}
+					ids.add(id);
 
-				const id = readNonEmptyString(item.id, "Tool call ID");
-				const name = readNonEmptyString(item.name, "Tool call name");
-				if (calls.has(id)) {
-					throw new Error(`Duplicate tool call ID: ${id}`);
-				}
-				calls.set(id, {
-					type: "tool-call",
-					id,
-					name,
-					input: structuredClone(item.input),
+					const tool = rendered.tools.get(name);
+					if (tool === undefined) {
+						throw new Error(`Tool was not declared for this turn: ${name}`);
+					}
+					return { call, tool };
 				});
-			}
 
-			if (calls.size === 0) {
-				throw new Error("Provider stopped for tool use without returning any tool calls.");
+			if (bindings.length === 0) {
+				throw new Error("Provider stopped for tool use without any tool calls.");
 			}
-			toolCalls = calls;
+			return bindings;
 		}
 
-		async function* stream(): AsyncGenerator<ModelEvent> {
+		async function* stream(): AsyncGenerator<ExecutionEvent> {
 			if (started) {
 				throw new Error("This execution has already started. Create a new execution to run again.");
 			}
 			started = true;
 
-			const { rendered: renderedTurn, provider } = await prepare();
-			signal.throwIfAborted();
+			while (true) {
+				const { rendered, provider } = await prepare();
+				const index = context.turn.index;
+				signal.throwIfAborted();
 
-			const context = { signal };
-			let response: ModelResponse | undefined;
+				yield Object.freeze({
+					type: "turn-start",
+					index,
+					plan: rendered.plan,
+				});
+				signal.throwIfAborted();
+				let response: ModelResponse | undefined;
+				const callContext = Object.freeze({ signal });
 
-			if (provider.stream) {
-				for await (const event of provider.stream(renderedTurn.plan.request, context)) {
-					signal.throwIfAborted();
-					if (response !== undefined) {
-						throw new Error("Provider emitted an event after its `done` event.");
+
+				if (provider.stream) {
+					for await (
+						const event of provider.stream(
+							rendered.plan.request,
+							callContext,
+						)
+					) {
+							signal.throwIfAborted();
+							if (response !== undefined) {
+								throw new Error("Provider emitted an event after its `done` event.");
+							}
+
+							if (event.type === "done") {
+								response = snapshot(event.response);
+							} else {
+								yield Object.freeze({
+									...event,
+									index,
+								});
+								signal.throwIfAborted();
+							}
+						}
+				} else {
+					response = snapshot(
+						await provider.complete(rendered.plan.request, callContext),
+					);
+				}
+				signal.throwIfAborted();
+				if (response === undefined) {
+					throw new Error("Provider stream ended without a `done` event.");
+				}
+				yield Object.freeze({
+					type: "model-response",
+					index,
+					response,
+				});
+				signal.throwIfAborted();
+
+				const results: ToolResult[] = [];
+				const continuing = response.stopReason === "tool-use";
+				if (continuing) {
+					const bindings = bindToolCalls(response, rendered);
+
+					if (opts.maxTurns) {
+						if (index + 1 >= opts.maxTurns) {
+							throw new Error(`Execution reached maxTurns = ${opts.maxTurns}. Pending tools were not executed.`);
+						}
 					}
 
-					if (event.type === "done") {
-						response = event.response;
-					} else {
-						yield event;
+					for (const { call, tool } of bindings) {
+						signal.throwIfAborted();
+						yield Object.freeze({
+							type: "tool-start",
+							index,
+							call,
+						});
+						signal.throwIfAborted();
+
+						const output = await tool.call(
+							structuredClone(call.input),
+							{
+								callId: call.id,
+								signal,
+							},
+						);
+						signal.throwIfAborted();
+
+						const result: ToolResult = Object.freeze({
+							type: "tool-result",
+							callId: call.id,
+							content: readString(output, "Tool result"),
+						});
+
+						results.push(result);
+
+						yield Object.freeze({
+							type: "tool-end",
+							index,
+							result,
+						});
 						signal.throwIfAborted();
 					}
 				}
-			} else {
-				response = await provider.complete(renderedTurn.plan.request, context);
+
+				const completed: CompletedTurn = Object.freeze({
+					index,
+					plan: rendered.plan,
+					response,
+					toolResults: Object.freeze(results),
+				});
+
+				yield Object.freeze({
+					type: "turn-end",
+					turn: completed,
+				});
+				signal.throwIfAborted();
+
+				if (!continuing) {
+					yield Object.freeze({ type: "done", response });
+					return;
+				}
+
+				const exchange = createConversationExchange(
+					globalThis.crypto.randomUUID(),
+					response.items,
+					completed.toolResults,
+				);
+				const conversation: Conversation = Object.freeze([
+					...rendered.conversation,
+					exchange,
+				]);
+				context = Object.freeze({
+					turn: Object.freeze({
+						index: index + 1,
+						signal,
+						previous: completed,
+					}),
+					conversation,
+				});
+				preparation = undefined;
 			}
-
-			signal.throwIfAborted();
-			if (response === undefined) {
-				throw new Error("Provider stream ended without a `done` event.");
-			}
-
-			captureToolCalls(response);
-
-			yield { type: "done", response };
 		}
 
 		async function run(): Promise<ModelResponse> {
@@ -193,48 +298,11 @@ export function createRuntime(
 			throw new Error("Execution ended without a response.");
 		}
 
-		async function callTool(callId: string): Promise<ToolResult> {
-			if (toolCalls === undefined) {
-				throw new Error("Tools can be invoked only after a completed tool-use response.");
-			}
 
-			const call = toolCalls.get(callId);
-			if (call === undefined) {
-				throw new Error(`Unknown tool call ID: ${callId}`);
-			}
-
-			const { rendered: renderedTurn } = await prepare();
-			let invocation = invocations.get(callId);
-
-			if (invocation === undefined) {
-				const tool = renderedTurn.tools.get(call.name);
-				if (tool === undefined) {
-					throw new Error(`Tool was not declared for this turn: ${call.name}`);
-				}
-				invocation = Promise.resolve().then(async () => {
-					signal.throwIfAborted();
-					const output = await tool.call(call.input, {
-						callId,
-						signal
-					});
-					signal.throwIfAborted();
-					const content = readString(output, "Tool result");
-
-					return Object.freeze({
-						type: "tool-result",
-						callId,
-						content,
-					});
-				});
-				invocations.set(callId, invocation);
-			}
-			return invocation;
-		}
-
-		return { inspect, stream, run, callTool };
+		return { inspect, stream, run };
 	}
 
-	function stream(tree: Child, opts: RunOptions = {}): AsyncGenerator<ModelEvent> {
+	function stream(tree: Child, opts: RunOptions = {}): AsyncGenerator<ExecutionEvent> {
 		return createExecution(tree, opts).stream();
 	}
 
