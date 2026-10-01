@@ -31,8 +31,17 @@ export type {
 	Tool,
 } from "./tool.js";
 
-export { walk } from "./walk.js";
+export { useTurn, useConversation } from "./hooks.js";
+export type { CompletedTurn, TurnContext } from "./hooks.js"
 
+export type {
+	Conversation,
+	ConversationEntry,
+	ConversationMessage,
+	ConversationExchange,
+} from "./conversation.js";
+
+export { walk } from "./walk.js";
 export { createRuntime } from "./runtime.js";
 
 export type {
